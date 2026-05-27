@@ -1,11 +1,13 @@
 {
-  "version": 2,
   "functions": {
+    "server.js": {
+      "includeFiles": "views/**"
+    },
     "api/index.js": {
       "includeFiles": "views/**"
     }
   },
   "rewrites": [
-    { "source": "/(.*)", "destination": "/api/index" }
+    { "source": "/(.*)", "destination": "/server.js" }
   ]
 }

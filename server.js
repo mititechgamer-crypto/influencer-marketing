@@ -617,7 +617,22 @@ function ensureInitialized() {
   return _initPromise;
 }
 
-// ---- Local boot (Vercel uses api/index.js instead) ----
+// ---- Unified request handler (works whether Vercel routes here or via api/index.js) ----
+async function handler(req, res) {
+  try {
+    await ensureInitialized();
+  } catch (e) {
+    console.error('Init failed:', e);
+    res.statusCode = 500;
+    res.setHeader('content-type', 'text/plain');
+    return res.end('Server initialization error. Check logs.');
+  }
+  return app(req, res);
+}
+handler.app = app;
+handler.ensureInitialized = ensureInitialized;
+
+// ---- Local boot (running `node server.js` directly) ----
 if (require.main === module) {
   ensureInitialized()
     .then(() => {
@@ -643,4 +658,8 @@ if (require.main === module) {
     });
 }
 
-module.exports = { app, ensureInitialized };
+// Default export: the handler function (Vercel calls this directly).
+// Named exports kept for backwards compat with api/index.js.
+module.exports = handler;
+module.exports.app = app;
+module.exports.ensureInitialized = ensureInitialized;
