@@ -8,7 +8,7 @@
     <% if (brandHasFinance(brand.slug)) { %>
       <a class="btn" href="/brand/<%= brand.slug %>/finance">💰 Finance</a>
     <% } %>
-    <% if (user.role === 'admin') { %>
+    <% if (canEdit) { %>
       <a class="btn primary" href="/brand/<%= brand.slug %>/new">+ Add Influencer</a>
     <% } %>
   </div>

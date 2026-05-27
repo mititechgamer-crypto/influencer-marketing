@@ -6,7 +6,7 @@
   <div>
     <h1><%= influencer.name %> <span class="muted">— <%= influencer.handle %></span></h1>
   </div>
-  <% if (user.role === 'admin') { %>
+  <% if (canEdit) { %>
     <div class="action-row">
       <a class="btn" href="/influencer/<%= influencer.id %>/edit">Edit</a>
       <form action="/influencer/<%= influencer.id %>/delete" method="post" class="inline"
@@ -33,7 +33,7 @@
     <dt>Review submitted on product page</dt>
     <dd>
       <span class="pill <%= influencer.review_submitted ? 'ok' : 'off' %>"><%= influencer.review_submitted ? 'Yes' : 'No' %></span>
-      <% if (user.role === 'admin') { %>
+      <% if (canEdit) { %>
         <form action="/influencer/<%= influencer.id %>/toggle-review" method="post" class="inline">
           <button class="btn small" type="submit">Toggle</button>
         </form>

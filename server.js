@@ -133,6 +133,16 @@ async function canAccessFinance(user, brandId) {
   return !!(row && Number(row.finance_access) === 1);
 }
 
+async function canEditBrand(user, brandId) {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  const row = await db.one(
+    'SELECT edit_access FROM user_brands WHERE user_id = $1 AND brand_id = $2',
+    [user.id, brandId]
+  );
+  return !!(row && Number(row.edit_access) === 1);
+}
+
 function inr(n) {
   const v = Number(n || 0);
   return '₹' + v.toLocaleString('en-IN', { maximumFractionDigits: 2 });
@@ -268,13 +278,17 @@ app.get('/brand/:slug', requireAuth, ah(async (req, res) => {
       [brand.id]
     );
   }
-  res.render('brand', { brand, influencers, q });
+  const canEdit = await canEditBrand(res.locals.user, brand.id);
+  res.render('brand', { brand, influencers, q, canEdit });
 }));
 
-// ---- Influencer CRUD (admin) ----
-app.get('/brand/:slug/new', requireAuth, requireAdmin, ah(async (req, res) => {
+// ---- Influencer CRUD (gated on edit_access for the brand) ----
+app.get('/brand/:slug/new', requireAuth, ah(async (req, res) => {
   const brand = await db.one('SELECT * FROM brands WHERE slug = $1', [req.params.slug]);
   if (!brand) return res.status(404).render('error', { message: 'Brand not found.' });
+  if (!await canEditBrand(res.locals.user, brand.id)) {
+    return res.status(403).render('error', { message: 'You do not have edit access for this brand.' });
+  }
   res.render('influencer-form', { brand, influencer: null, error: null });
 }));
 
@@ -299,9 +313,12 @@ function parseInfluencerForm(body) {
   };
 }
 
-app.post('/brand/:slug/new', requireAuth, requireAdmin, ah(async (req, res) => {
+app.post('/brand/:slug/new', requireAuth, ah(async (req, res) => {
   const brand = await db.one('SELECT * FROM brands WHERE slug = $1', [req.params.slug]);
   if (!brand) return res.status(404).render('error', { message: 'Brand not found.' });
+  if (!await canEditBrand(res.locals.user, brand.id)) {
+    return res.status(403).render('error', { message: 'You do not have edit access for this brand.' });
+  }
   const data = parseInfluencerForm(req.body);
   if (!data.handle || !data.name) {
     return res.render('influencer-form', { brand, influencer: data, error: 'Handle and Name are required.' });
@@ -333,19 +350,26 @@ app.get('/influencer/:id', requireAuth, ah(async (req, res) => {
     return res.status(403).render('error', { message: 'No access to this record.' });
   }
   const brand = await db.one('SELECT * FROM brands WHERE id = $1', [inf.brand_id]);
-  res.render('influencer-detail', { brand, influencer: inf });
+  const canEdit = await canEditBrand(res.locals.user, inf.brand_id);
+  res.render('influencer-detail', { brand, influencer: inf, canEdit });
 }));
 
-app.get('/influencer/:id/edit', requireAuth, requireAdmin, ah(async (req, res) => {
+app.get('/influencer/:id/edit', requireAuth, ah(async (req, res) => {
   const inf = await db.one('SELECT * FROM influencers WHERE id = $1', [req.params.id]);
   if (!inf) return res.status(404).render('error', { message: 'Influencer not found.' });
+  if (!await canEditBrand(res.locals.user, inf.brand_id)) {
+    return res.status(403).render('error', { message: 'You do not have edit access for this record.' });
+  }
   const brand = await db.one('SELECT * FROM brands WHERE id = $1', [inf.brand_id]);
   res.render('influencer-form', { brand, influencer: inf, error: null });
 }));
 
-app.post('/influencer/:id/edit', requireAuth, requireAdmin, ah(async (req, res) => {
+app.post('/influencer/:id/edit', requireAuth, ah(async (req, res) => {
   const inf = await db.one('SELECT * FROM influencers WHERE id = $1', [req.params.id]);
   if (!inf) return res.status(404).render('error', { message: 'Influencer not found.' });
+  if (!await canEditBrand(res.locals.user, inf.brand_id)) {
+    return res.status(403).render('error', { message: 'You do not have edit access for this record.' });
+  }
   const brand = await db.one('SELECT * FROM brands WHERE id = $1', [inf.brand_id]);
   const data = parseInfluencerForm(req.body);
   if (!data.handle || !data.name) {
@@ -372,9 +396,12 @@ app.post('/influencer/:id/edit', requireAuth, requireAdmin, ah(async (req, res) 
   htmlRedirect(res,`/influencer/${inf.id}`);
 }));
 
-app.post('/influencer/:id/delete', requireAuth, requireAdmin, ah(async (req, res) => {
+app.post('/influencer/:id/delete', requireAuth, ah(async (req, res) => {
   const inf = await db.one('SELECT * FROM influencers WHERE id = $1', [req.params.id]);
   if (!inf) return res.status(404).render('error', { message: 'Influencer not found.' });
+  if (!await canEditBrand(res.locals.user, inf.brand_id)) {
+    return res.status(403).render('error', { message: 'You do not have edit access for this record.' });
+  }
   const brand = await db.one('SELECT slug FROM brands WHERE id = $1', [inf.brand_id]);
   await db.query('DELETE FROM influencers WHERE id = $1', [inf.id]);
   await audit(res.locals.user, 'delete', 'influencer', inf.id, {
@@ -385,9 +412,12 @@ app.post('/influencer/:id/delete', requireAuth, requireAdmin, ah(async (req, res
   htmlRedirect(res,`/brand/${brand.slug}`);
 }));
 
-app.post('/influencer/:id/toggle-review', requireAuth, requireAdmin, ah(async (req, res) => {
+app.post('/influencer/:id/toggle-review', requireAuth, ah(async (req, res) => {
   const inf = await db.one('SELECT id, brand_id, handle, name, review_submitted FROM influencers WHERE id = $1', [req.params.id]);
   if (!inf) return res.status(404).render('error', { message: 'Influencer not found.' });
+  if (!await canEditBrand(res.locals.user, inf.brand_id)) {
+    return res.status(403).render('error', { message: 'You do not have edit access for this record.' });
+  }
   const me = res.locals.user;
   const newVal = inf.review_submitted ? 0 : 1;
   await db.query(`
@@ -648,16 +678,20 @@ app.get('/reports', requireAuth, ah(async (req, res) => {
 app.get('/admin/users', requireAuth, requireAdmin, ah(async (req, res) => {
   const users = await db.many('SELECT id, username, role, created_at FROM users ORDER BY role, username');
   const brands = await db.many('SELECT id, name, slug FROM brands ORDER BY name');
-  const assignments = await db.many('SELECT user_id, brand_id, finance_access FROM user_brands');
+  const assignments = await db.many('SELECT user_id, brand_id, finance_access, edit_access FROM user_brands');
   const brandByUser = {};
   const financeByUser = {};
+  const editByUser = {};
   for (const a of assignments) {
     (brandByUser[a.user_id] ||= new Set()).add(Number(a.brand_id));
     if (Number(a.finance_access) === 1) {
       (financeByUser[a.user_id] ||= new Set()).add(Number(a.brand_id));
     }
+    if (Number(a.edit_access) === 1) {
+      (editByUser[a.user_id] ||= new Set()).add(Number(a.brand_id));
+    }
   }
-  res.render('admin-users', { users, brands, brandByUser, financeByUser, error: null });
+  res.render('admin-users', { users, brands, brandByUser, financeByUser, editByUser, error: null });
 }));
 
 app.post('/admin/users/new', requireAuth, requireAdmin, ah(async (req, res) => {
@@ -681,19 +715,21 @@ app.post('/admin/users/new', requireAuth, requireAdmin, ah(async (req, res) => {
   const newId = result.rows[0] ? result.rows[0].id : result.lastInsertRowid;
   const brandIds = [].concat(req.body.brand_ids || []).map(Number).filter(Boolean);
   const financeIds = new Set([].concat(req.body.finance_ids || []).map(Number).filter(Boolean));
+  const editIds = new Set([].concat(req.body.edit_ids || []).map(Number).filter(Boolean));
   for (const bid of brandIds) {
     const fin = financeIds.has(bid) ? 1 : 0;
+    const edt = editIds.has(bid) ? 1 : 0;
     if (db.dialect === 'pg') {
       await db.query(
-        'INSERT INTO user_brands (user_id, brand_id, finance_access) VALUES ($1, $2, $3) ON CONFLICT (user_id, brand_id) DO UPDATE SET finance_access = EXCLUDED.finance_access',
-        [newId, bid, fin]
+        'INSERT INTO user_brands (user_id, brand_id, finance_access, edit_access) VALUES ($1, $2, $3, $4) ON CONFLICT (user_id, brand_id) DO UPDATE SET finance_access = EXCLUDED.finance_access, edit_access = EXCLUDED.edit_access',
+        [newId, bid, fin, edt]
       );
     } else {
-      await db.query('INSERT OR REPLACE INTO user_brands (user_id, brand_id, finance_access) VALUES ($1, $2, $3)', [newId, bid, fin]);
+      await db.query('INSERT OR REPLACE INTO user_brands (user_id, brand_id, finance_access, edit_access) VALUES ($1, $2, $3, $4)', [newId, bid, fin, edt]);
     }
   }
   await audit(res.locals.user, 'create', 'user', newId, {
-    summary: `Created user "${username}" (${role}); ${brandIds.length} brand(s), ${financeIds.size} with finance`
+    summary: `Created user "${username}" (${role}); ${brandIds.length} brand(s), ${editIds.size} editable, ${financeIds.size} with finance`
   });
   flash(req, 'success', `User "${username}" created.`);
   htmlRedirect(res,'/admin/users');
@@ -709,21 +745,23 @@ app.post('/admin/users/:id/brands', requireAuth, requireAdmin, ah(async (req, re
   }
   const brandIds = [].concat(req.body.brand_ids || []).map(Number).filter(Boolean);
   const financeIds = new Set([].concat(req.body.finance_ids || []).map(Number).filter(Boolean));
+  const editIds = new Set([].concat(req.body.edit_ids || []).map(Number).filter(Boolean));
   await db.query('DELETE FROM user_brands WHERE user_id = $1', [uid]);
   for (const bid of brandIds) {
     const fin = financeIds.has(bid) ? 1 : 0;
+    const edt = editIds.has(bid) ? 1 : 0;
     if (db.dialect === 'pg') {
       await db.query(
-        'INSERT INTO user_brands (user_id, brand_id, finance_access) VALUES ($1, $2, $3) ON CONFLICT (user_id, brand_id) DO UPDATE SET finance_access = EXCLUDED.finance_access',
-        [uid, bid, fin]
+        'INSERT INTO user_brands (user_id, brand_id, finance_access, edit_access) VALUES ($1, $2, $3, $4) ON CONFLICT (user_id, brand_id) DO UPDATE SET finance_access = EXCLUDED.finance_access, edit_access = EXCLUDED.edit_access',
+        [uid, bid, fin, edt]
       );
     } else {
-      await db.query('INSERT OR REPLACE INTO user_brands (user_id, brand_id, finance_access) VALUES ($1, $2, $3)', [uid, bid, fin]);
+      await db.query('INSERT OR REPLACE INTO user_brands (user_id, brand_id, finance_access, edit_access) VALUES ($1, $2, $3, $4)', [uid, bid, fin, edt]);
     }
   }
   await audit(res.locals.user, 'update', 'user', uid, {
-    summary: `Updated access for "${target.username}" (${brandIds.length} brand(s), ${financeIds.size} with finance)`,
-    changes: { brand_ids: brandIds, finance_ids: [...financeIds] }
+    summary: `Updated access for "${target.username}" (${brandIds.length} brand(s), ${editIds.size} editable, ${financeIds.size} with finance)`,
+    changes: { brand_ids: brandIds, edit_ids: [...editIds], finance_ids: [...financeIds] }
   });
   flash(req, 'success', 'Access updated.');
   htmlRedirect(res,'/admin/users');
