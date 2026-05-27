@@ -1,0 +1,66 @@
+<%- include('partials/header', { title: influencer && influencer.id ? 'Edit Influencer' : 'New Influencer' }) %>
+<p class="breadcrumb">
+  <a href="/">Brands</a> / <a href="/brand/<%= brand.slug %>"><%= brand.name %></a> /
+  <span><%= influencer && influencer.id ? 'Edit' : 'New' %></span>
+</p>
+<h1><%= influencer && influencer.id ? 'Edit Influencer' : 'New Influencer' %></h1>
+<% if (error) { %><div class="flash error"><%= error %></div><% } %>
+
+<form method="post" action="<%= influencer && influencer.id ? '/influencer/' + influencer.id + '/edit' : '/brand/' + brand.slug + '/new' %>" class="form">
+  <div class="row">
+    <label>Handle *
+      <input type="text" name="handle" required value="<%= influencer ? influencer.handle || '' : '' %>" placeholder="@username">
+    </label>
+    <label>Name *
+      <input type="text" name="name" required value="<%= influencer ? influencer.name || '' : '' %>">
+    </label>
+  </div>
+  <div class="row">
+    <label>Contact Number
+      <input type="text" name="contact" value="<%= influencer ? influencer.contact || '' : '' %>">
+    </label>
+    <label>Email
+      <input type="email" name="email" value="<%= influencer ? influencer.email || '' : '' %>">
+    </label>
+  </div>
+  <label>Product
+    <input type="text" name="product" value="<%= influencer ? influencer.product || '' : '' %>" placeholder="Which product / SKU they're promoting">
+  </label>
+  <label>Script
+    <textarea name="script" rows="5" placeholder="Talking points / script for the influencer"><%= influencer ? influencer.script || '' : '' %></textarea>
+  </label>
+  <label>Deliverables
+    <textarea name="deliverables" rows="3" placeholder="e.g. 1 Reel + 2 Stories + 1 Static Post"><%= influencer ? influencer.deliverables || '' : '' %></textarea>
+  </label>
+  <div class="row">
+    <label>Timeline (deliverable date)
+      <input type="date" name="timeline_date" value="<%= influencer ? influencer.timeline_date || '' : '' %>">
+    </label>
+    <label>Pay Agreed (₹)
+      <input type="number" name="pay_agreed" min="0" step="0.01" value="<%= influencer ? influencer.pay_agreed || 0 : 0 %>">
+    </label>
+  </div>
+  <div class="row">
+    <label>Advance Paid (₹)
+      <input type="number" name="advance_paid" min="0" step="0.01" value="<%= influencer ? influencer.advance_paid || 0 : 0 %>">
+    </label>
+    <label>Payment status
+      <select name="payment_status">
+        <% const ps = influencer ? influencer.payment_status : 'unpaid'; %>
+        <option value="unpaid" <%= ps === 'unpaid' ? 'selected' : '' %>>Unpaid</option>
+        <option value="advance" <%= ps === 'advance' ? 'selected' : '' %>>Advance Paid</option>
+        <option value="full" <%= ps === 'full' ? 'selected' : '' %>>Full Paid</option>
+      </select>
+    </label>
+  </div>
+  <label class="toggle">
+    <input type="checkbox" name="review_submitted" value="1" <%= influencer && influencer.review_submitted ? 'checked' : '' %>>
+    <span>Review submitted on product page</span>
+  </label>
+
+  <div class="actions">
+    <button type="submit" class="btn primary">Save</button>
+    <a href="<%= influencer && influencer.id ? '/influencer/' + influencer.id : '/brand/' + brand.slug %>" class="btn link-btn">Cancel</a>
+  </div>
+</form>
+<%- include('partials/footer') %>

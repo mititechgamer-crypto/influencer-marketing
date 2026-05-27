@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><%= typeof title !== 'undefined' ? title + ' · ' : '' %>Influencer Marketing</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <% if (user) { %>
+  <header class="topbar">
+    <a class="brand-link" href="/">📈 Influencer Marketing</a>
+    <nav>
+      <a href="/">Dashboard</a>
+      <a href="/reports">Reports</a>
+      <% if (user.role === 'admin') { %>
+        <a href="/admin/users">Users</a>
+        <a href="/admin/activity">Activity</a>
+        <a href="/admin/logins">Logins</a>
+      <% } %>
+      <a href="/account">Account</a>
+      <span class="user-tag"><%= user.username %><span class="role <%= user.role %>"><%= user.role %></span></span>
+      <form action="/logout" method="post" class="inline">
+        <button class="link" type="submit">Logout</button>
+      </form>
+    </nav>
+  </header>
+  <% } %>
+  <main class="container">
+    <% if (flash) { %>
+      <div class="flash <%= flash.type %>"><%= flash.message %></div>
+    <% } %>

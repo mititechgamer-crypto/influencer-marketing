@@ -1,0 +1,85 @@
+<%- include('partials/header', { title: 'Activity log' }) %>
+<h1>Activity log</h1>
+<p class="muted"><%= total.toLocaleString('en-IN') %> total events</p>
+
+<form method="get" action="/admin/activity" class="filters">
+  <label>User
+    <select name="user">
+      <option value="">Everyone</option>
+      <% users.forEach(u => { %>
+        <option value="<%= u.username %>" <%= filterUser === u.username ? 'selected' : '' %>><%= u.username %></option>
+      <% }) %>
+    </select>
+  </label>
+  <label>Entity
+    <select name="entity">
+      <option value="">All</option>
+      <option value="influencer" <%= filterEntity === 'influencer' ? 'selected' : '' %>>Influencer</option>
+      <option value="user" <%= filterEntity === 'user' ? 'selected' : '' %>>User</option>
+    </select>
+  </label>
+  <button type="submit" class="btn primary">Apply</button>
+  <% if (filterUser || filterEntity) { %><a class="btn link-btn" href="/admin/activity">Clear</a><% } %>
+</form>
+
+<% if (!rows.length) { %>
+  <p class="muted empty">No activity yet.</p>
+<% } else { %>
+<div class="table-wrap">
+  <table class="data">
+    <thead>
+      <tr>
+        <th>When</th>
+        <th>User</th>
+        <th>Action</th>
+        <th>Summary</th>
+        <th>Changed fields</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% rows.forEach(r => { %>
+        <tr>
+          <td><%= new Date(r.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) %></td>
+          <td><strong><%= r.username %></strong></td>
+          <td>
+            <span class="pill action-<%= r.action %>"><%= r.action %></span>
+            <span class="muted small"><%= r.entity_type %><% if (r.entity_id) { %> #<%= r.entity_id %><% } %></span>
+          </td>
+          <td><%= r.summary || '—' %></td>
+          <td>
+            <% if (r.changes && typeof r.changes === 'object') {
+                 const keys = Object.keys(r.changes); %>
+              <% if (keys.length <= 3) { %>
+                <% keys.forEach(k => { %>
+                  <span class="pill subtle"><%= k %></span>
+                <% }) %>
+              <% } else { %>
+                <span class="muted small"><%= keys.length %> fields</span>
+                <details>
+                  <summary class="small">view</summary>
+                  <pre class="long-text small"><%= JSON.stringify(r.changes, null, 2) %></pre>
+                </details>
+              <% } %>
+            <% } else { %>
+              <span class="muted">—</span>
+            <% } %>
+          </td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+
+<% if (pages > 1) { %>
+<nav class="pager">
+  <% if (page > 1) { %>
+    <a class="btn small" href="?<%= [filterUser && 'user='+encodeURIComponent(filterUser), filterEntity && 'entity='+filterEntity, 'page='+(page-1)].filter(Boolean).join('&') %>">‹ Prev</a>
+  <% } %>
+  <span class="muted">Page <%= page %> of <%= pages %></span>
+  <% if (page < pages) { %>
+    <a class="btn small" href="?<%= [filterUser && 'user='+encodeURIComponent(filterUser), filterEntity && 'entity='+filterEntity, 'page='+(page+1)].filter(Boolean).join('&') %>">Next ›</a>
+  <% } %>
+</nav>
+<% } %>
+<% } %>
+<%- include('partials/footer') %>

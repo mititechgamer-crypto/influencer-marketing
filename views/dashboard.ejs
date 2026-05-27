@@ -1,0 +1,21 @@
+<%- include('partials/header', { title: 'Dashboard' }) %>
+<h1>Brands</h1>
+<% if (!brands.length) { %>
+  <p class="muted">You don't have access to any brand yet. Ask the admin to assign one.</p>
+<% } %>
+<div class="grid">
+  <% brands.forEach(b => { %>
+    <a class="card brand-card brand-<%= b.slug %>" href="/brand/<%= b.slug %>">
+      <div class="card-head">
+        <h2><%= b.name %></h2>
+        <span class="badge"><%= b.total %> influencers</span>
+      </div>
+      <dl class="stats">
+        <div><dt>Agreed</dt><dd><%= inr(b.agreed) %></dd></div>
+        <div><dt>Paid</dt><dd><%= inr(b.paid) %></dd></div>
+        <div><dt>Balance</dt><dd class="<%= b.balance > 0 ? 'warn' : '' %>"><%= inr(b.balance) %></dd></div>
+      </dl>
+    </a>
+  <% }) %>
+</div>
+<%- include('partials/footer') %>

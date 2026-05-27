@@ -1,0 +1,23 @@
+{
+  "name": "influencer-marketing-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Influencer marketing data manager for SimpleObjectz, Vaayuraksh, Mintly Beverages",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --no-warnings=ExperimentalWarning server.js",
+    "init-db": "node --no-warnings=ExperimentalWarning lib/schema.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "connect-pg-simple": "^10.0.0",
+    "dotenv": "^16.4.5",
+    "ejs": "^3.1.10",
+    "express": "^4.21.0",
+    "express-session": "^1.18.0",
+    "pg": "^8.13.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -1,0 +1,54 @@
+<%- include('partials/header', { title: brand.name }) %>
+<div class="page-head">
+  <div>
+    <p class="breadcrumb"><a href="/">Brands</a> / <span><%= brand.name %></span></p>
+    <h1><%= brand.name %></h1>
+  </div>
+  <% if (user.role === 'admin') { %>
+    <a class="btn primary" href="/brand/<%= brand.slug %>/new">+ Add Influencer</a>
+  <% } %>
+</div>
+
+<form class="search" method="get" action="/brand/<%= brand.slug %>">
+  <input type="search" name="q" value="<%= q %>" placeholder="Search by handle, name, email, contact, product...">
+  <button class="btn" type="submit">Search</button>
+  <% if (q) { %><a class="btn link-btn" href="/brand/<%= brand.slug %>">Clear</a><% } %>
+</form>
+
+<% if (!influencers.length) { %>
+  <p class="muted empty">No influencers yet<% if (q) { %> matching "<%= q %>"<% } %>.</p>
+<% } else { %>
+<div class="table-wrap">
+  <table class="data">
+    <thead>
+      <tr>
+        <th>Handle</th>
+        <th>Name</th>
+        <th>Product</th>
+        <th>Timeline</th>
+        <th class="num">Agreed</th>
+        <th class="num">Paid</th>
+        <th>Payment</th>
+        <th>Review</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% influencers.forEach(i => {
+           const paid = i.payment_status === 'full' ? i.pay_agreed : (i.payment_status === 'advance' ? i.advance_paid : 0);
+      %>
+        <tr onclick="location='/influencer/<%= i.id %>'">
+          <td><strong><%= i.handle %></strong></td>
+          <td><%= i.name %></td>
+          <td><%= i.product || '—' %></td>
+          <td><%= i.timeline_date || '—' %></td>
+          <td class="num"><%= inr(i.pay_agreed) %></td>
+          <td class="num"><%= inr(paid) %></td>
+          <td><span class="pill pay-<%= i.payment_status %>"><%= i.payment_status %></span></td>
+          <td><span class="pill <%= i.review_submitted ? 'ok' : 'off' %>"><%= i.review_submitted ? 'Yes' : 'No' %></span></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<% } %>
+<%- include('partials/footer') %>

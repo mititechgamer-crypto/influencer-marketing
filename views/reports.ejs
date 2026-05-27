@@ -1,0 +1,73 @@
+<%- include('partials/header', { title: 'Reports' }) %>
+<h1>Reports</h1>
+
+<form method="get" action="/reports" class="filters">
+  <label>Period
+    <select name="period">
+      <option value="month" <%= period === 'month' ? 'selected' : '' %>>Monthly</option>
+      <option value="quarter" <%= period === 'quarter' ? 'selected' : '' %>>Quarterly</option>
+      <option value="year" <%= period === 'year' ? 'selected' : '' %>>Yearly</option>
+    </select>
+  </label>
+  <label>Brand
+    <select name="brand">
+      <option value="all" <%= brandFilter === 'all' ? 'selected' : '' %>>All my brands</option>
+      <% brands.forEach(b => { %>
+        <option value="<%= b.id %>" <%= brandFilter === b.id ? 'selected' : '' %>><%= b.name %></option>
+      <% }) %>
+    </select>
+  </label>
+  <% if (period !== 'year') { %>
+  <label>Year
+    <input type="number" name="year" value="<%= year %>" min="2000" max="2100" style="width:100px">
+  </label>
+  <% } %>
+  <button class="btn primary" type="submit">Apply</button>
+</form>
+
+<% if (!rows.length) { %>
+  <p class="muted empty">No data for the selected filters.</p>
+<% } else { %>
+<div class="table-wrap">
+  <table class="data">
+    <thead>
+      <tr>
+        <th><%= period === 'month' ? 'Month' : period === 'quarter' ? 'Quarter' : 'Year' %></th>
+        <th class="num">Influencers</th>
+        <th class="num">Pay Agreed</th>
+        <th class="num">Advance Paid</th>
+        <th class="num">Total Paid</th>
+        <th class="num">Balance Due</th>
+        <th class="num">Reviews</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% rows.forEach(r => { %>
+        <tr>
+          <td><strong><%= r.bucket %></strong></td>
+          <td class="num"><%= r.total %></td>
+          <td class="num"><%= inr(r.agreed) %></td>
+          <td class="num"><%= inr(r.advance) %></td>
+          <td class="num"><%= inr(r.paid) %></td>
+          <td class="num <%= (r.agreed - r.paid) > 0 ? 'warn' : '' %>"><%= inr(r.agreed - r.paid) %></td>
+          <td class="num"><%= r.reviews %>/<%= r.total %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+    <% if (totals) { %>
+    <tfoot>
+      <tr>
+        <th>Total</th>
+        <th class="num"><%= totals.total %></th>
+        <th class="num"><%= inr(totals.agreed) %></th>
+        <th class="num"><%= inr(totals.advance) %></th>
+        <th class="num"><%= inr(totals.paid) %></th>
+        <th class="num <%= totals.balance > 0 ? 'warn' : '' %>"><%= inr(totals.balance) %></th>
+        <th class="num"><%= totals.reviews %>/<%= totals.total %></th>
+      </tr>
+    </tfoot>
+    <% } %>
+  </table>
+</div>
+<% } %>
+<%- include('partials/footer') %>

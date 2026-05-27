@@ -1,0 +1,76 @@
+<%- include('partials/header', { title: 'Users' }) %>
+<h1>Users</h1>
+
+<section class="block">
+  <h2>Create user</h2>
+  <form method="post" action="/admin/users/new" class="form">
+    <div class="row">
+      <label>Username
+        <input type="text" name="username" required>
+      </label>
+      <label>Password (min 6)
+        <input type="text" name="password" required minlength="6">
+      </label>
+      <label>Role
+        <select name="role">
+          <option value="user">User (read-only)</option>
+          <option value="admin">Admin</option>
+        </select>
+      </label>
+    </div>
+    <fieldset class="checks">
+      <legend>Brand access (for User role)</legend>
+      <% brands.forEach(b => { %>
+        <label class="check">
+          <input type="checkbox" name="brand_ids" value="<%= b.id %>"> <%= b.name %>
+        </label>
+      <% }) %>
+    </fieldset>
+    <button class="btn primary" type="submit">Create user</button>
+  </form>
+</section>
+
+<section class="block">
+  <h2>Existing users</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Username</th><th>Role</th><th>Brand access</th><th>Actions</th></tr></thead>
+      <tbody>
+        <% users.forEach(u => {
+             const assigned = byUser[u.id] || new Set(); %>
+          <tr>
+            <td><strong><%= u.username %></strong></td>
+            <td><span class="role <%= u.role %>"><%= u.role %></span></td>
+            <td>
+              <% if (u.role === 'admin') { %>
+                <span class="muted">All brands (admin)</span>
+              <% } else { %>
+                <form method="post" action="/admin/users/<%= u.id %>/brands" class="inline-stack">
+                  <% brands.forEach(b => { %>
+                    <label class="check">
+                      <input type="checkbox" name="brand_ids" value="<%= b.id %>" <%= assigned.has(b.id) ? 'checked' : '' %>>
+                      <%= b.name %>
+                    </label>
+                  <% }) %>
+                  <button class="btn small" type="submit">Save</button>
+                </form>
+              <% } %>
+            </td>
+            <td>
+              <form method="post" action="/admin/users/<%= u.id %>/reset-password" class="inline" onsubmit="return confirm('Reset password for <%= u.username %>?');">
+                <input type="text" name="password" placeholder="new password" minlength="6" required style="width:140px">
+                <button class="btn small" type="submit">Reset</button>
+              </form>
+              <% if (u.id !== user.id) { %>
+                <form method="post" action="/admin/users/<%= u.id %>/delete" class="inline" onsubmit="return confirm('Delete user <%= u.username %>?');">
+                  <button class="btn small danger" type="submit">Delete</button>
+                </form>
+              <% } %>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</section>
+<%- include('partials/footer') %>

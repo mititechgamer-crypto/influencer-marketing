@@ -1,0 +1,61 @@
+<%- include('partials/header', { title: influencer.name }) %>
+<p class="breadcrumb">
+  <a href="/">Brands</a> / <a href="/brand/<%= brand.slug %>"><%= brand.name %></a> / <span><%= influencer.name %></span>
+</p>
+<div class="page-head">
+  <div>
+    <h1><%= influencer.name %> <span class="muted">— <%= influencer.handle %></span></h1>
+  </div>
+  <% if (user.role === 'admin') { %>
+    <div class="action-row">
+      <a class="btn" href="/influencer/<%= influencer.id %>/edit">Edit</a>
+      <form action="/influencer/<%= influencer.id %>/delete" method="post" class="inline"
+            onsubmit="return confirm('Delete this influencer? This cannot be undone.');">
+        <button class="btn danger" type="submit">Delete</button>
+      </form>
+    </div>
+  <% } %>
+</div>
+
+<div class="detail-grid">
+  <div class="field"><dt>Contact</dt><dd><%= influencer.contact || '—' %></dd></div>
+  <div class="field"><dt>Email</dt><dd><%= influencer.email || '—' %></dd></div>
+  <div class="field"><dt>Product</dt><dd><%= influencer.product || '—' %></dd></div>
+  <div class="field"><dt>Timeline</dt><dd><%= influencer.timeline_date || '—' %></dd></div>
+  <div class="field"><dt>Pay Agreed</dt><dd><%= inr(influencer.pay_agreed) %></dd></div>
+  <div class="field"><dt>Advance Paid</dt><dd><%= inr(influencer.advance_paid) %></dd></div>
+  <div class="field"><dt>Payment Status</dt><dd><span class="pill pay-<%= influencer.payment_status %>"><%= influencer.payment_status %></span></dd></div>
+  <% const paid = influencer.payment_status === 'full' ? influencer.pay_agreed
+                 : influencer.payment_status === 'advance' ? influencer.advance_paid : 0;
+     const bal = (influencer.pay_agreed || 0) - paid; %>
+  <div class="field"><dt>Balance Due</dt><dd class="<%= bal > 0 ? 'warn' : '' %>"><%= inr(bal) %></dd></div>
+  <div class="field full">
+    <dt>Review submitted on product page</dt>
+    <dd>
+      <span class="pill <%= influencer.review_submitted ? 'ok' : 'off' %>"><%= influencer.review_submitted ? 'Yes' : 'No' %></span>
+      <% if (user.role === 'admin') { %>
+        <form action="/influencer/<%= influencer.id %>/toggle-review" method="post" class="inline">
+          <button class="btn small" type="submit">Toggle</button>
+        </form>
+      <% } %>
+    </dd>
+  </div>
+</div>
+
+<p class="muted small">
+  <% if (influencer.updated_by_username) { %>
+    Last updated by <strong><%= influencer.updated_by_username %></strong> on <%= new Date(influencer.updated_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) %>.
+  <% } else { %>
+    Created on <%= new Date(influencer.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) %>.
+  <% } %>
+</p>
+
+<section class="block">
+  <h3>Script</h3>
+  <pre class="long-text"><%= influencer.script || '—' %></pre>
+</section>
+<section class="block">
+  <h3>Deliverables</h3>
+  <pre class="long-text"><%= influencer.deliverables || '—' %></pre>
+</section>
+<%- include('partials/footer') %>

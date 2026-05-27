@@ -1,0 +1,10 @@
+node_modules/
+data.sqlite
+data.sqlite-shm
+data.sqlite-wal
+.session-secret
+.env
+.env.local
+*.log
+.DS_Store
+Thumbs.db
