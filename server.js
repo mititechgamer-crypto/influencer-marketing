@@ -52,6 +52,30 @@ app.set('views', path.join(__dirname, 'views'));
 app.use(express.urlencoded({ extended: false }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Vercel rewrites all requests to /api/index (or /server.js). Restore the
+// original request path so Express's routes see "/login", "/", etc. and not
+// the rewritten internal target.
+app.use((req, res, next) => {
+  const original = req.headers['x-vercel-original-url'] || req.headers['x-original-url'];
+  if (original && typeof original === 'string') {
+    // x-vercel-original-url may be a full URL or just the path
+    try {
+      const u = original.startsWith('http') ? new URL(original) : new URL(original, 'http://x');
+      req.url = u.pathname + u.search;
+    } catch {
+      req.url = original;
+    }
+  } else {
+    // Fallback: strip known rewrite prefixes if no header is present.
+    for (const prefix of ['/api/index', '/server.js']) {
+      if (req.url === prefix) { req.url = '/'; break; }
+      if (req.url.startsWith(prefix + '?')) { req.url = '/' + req.url.slice(prefix.length + 1); break; }
+      if (req.url.startsWith(prefix + '/')) { req.url = req.url.slice(prefix.length); break; }
+    }
+  }
+  next();
+});
+
 // behind Vercel / Render / any HTTPS proxy
 if (isProd || isServerless) app.set('trust proxy', 1);
 
@@ -806,7 +830,9 @@ app.get('/admin/logins', requireAuth, requireAdmin, ah(async (req, res) => {
 app.get('/healthz', (req, res) => res.json({ ok: true }));
 
 // ---- 404 + error handler ----
-app.use((req, res) => res.status(404).render('error', { message: 'Page not found.' }));
+app.use((req, res) => res.status(404).render('error', {
+  message: `Page not found. Method=${req.method} url=${req.url} originalUrl=${req.originalUrl} headers.x-vercel-original-url=${req.headers['x-vercel-original-url'] || '(none)'}`
+}));
 app.use((err, req, res, next) => {
   console.error('--- REQUEST ERROR ---');
   console.error(err && err.stack ? err.stack : err);
