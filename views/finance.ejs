@@ -1,0 +1,100 @@
+<%- include('partials/header', { title: brand.name + ' Finance' }) %>
+<p class="breadcrumb">
+  <a href="/">Brands</a> / <a href="/brand/<%= brand.slug %>"><%= brand.name %></a> / <span>Finance</span>
+</p>
+<div class="page-head">
+  <div>
+    <h1><%= brand.name %> · Finance</h1>
+    <p class="muted">Spending tracked per founder. Grand total: <strong><%= inr(grandTotal) %></strong></p>
+  </div>
+</div>
+
+<form method="get" action="/brand/<%= brand.slug %>/finance" class="filters">
+  <label>Period
+    <select name="period" onchange="this.form.submit()">
+      <option value="month" <%= period === 'month' ? 'selected' : '' %>>Monthly</option>
+      <option value="quarter" <%= period === 'quarter' ? 'selected' : '' %>>Quarterly</option>
+      <option value="year" <%= period === 'year' ? 'selected' : '' %>>Yearly</option>
+    </select>
+  </label>
+  <label>Year
+    <input type="number" name="year" value="<%= year %>" min="2000" max="2100" style="width:100px">
+  </label>
+  <% if (period === 'month') { %>
+    <label>Month
+      <select name="month">
+        <% for (let m = 1; m <= 12; m++) {
+             const label = new Date(2000, m-1, 1).toLocaleString('en-IN', { month: 'long' }); %>
+          <option value="<%= m %>" <%= month === m ? 'selected' : '' %>><%= label %></option>
+        <% } %>
+      </select>
+    </label>
+  <% } else if (period === 'quarter') { %>
+    <label>Quarter
+      <select name="quarter">
+        <% for (let q = 1; q <= 4; q++) { %>
+          <option value="<%= q %>" <%= quarter === q ? 'selected' : '' %>>Q<%= q %></option>
+        <% } %>
+      </select>
+    </label>
+  <% } %>
+  <button class="btn primary" type="submit">Apply</button>
+</form>
+
+<div class="finance-grid">
+  <% founders.forEach(f => {
+       const bucket = byFounder[f]; %>
+    <section class="finance-col">
+      <header>
+        <h2><%= f %></h2>
+        <% if (canWrite) { %>
+          <a class="btn small primary" href="/brand/<%= brand.slug %>/finance/new?founder=<%= encodeURIComponent(f) %>">+ Add</a>
+        <% } %>
+      </header>
+      <% if (!bucket.expenses.length) { %>
+        <p class="muted empty">No expenses for this period.</p>
+      <% } else { %>
+        <div class="table-wrap">
+          <table class="data finance-table">
+            <thead>
+              <tr><th>Date</th><th>Vendor</th><th class="num">Amount</th><% if (canWrite) { %><th></th><% } %></tr>
+            </thead>
+            <tbody>
+              <% bucket.expenses.forEach(e => { %>
+                <tr>
+                  <td><%= e.spent_date %></td>
+                  <td>
+                    <%= e.vendor %>
+                    <% if (e.notes) { %><div class="muted small"><%= e.notes %></div><% } %>
+                  </td>
+                  <td class="num"><%= inr(e.amount) %></td>
+                  <% if (canWrite) { %>
+                    <td class="row-actions">
+                      <a class="btn small" href="/finance/<%= e.id %>/edit">Edit</a>
+                      <form method="post" action="/finance/<%= e.id %>/delete" class="inline" onsubmit="return confirm('Delete this expense?');">
+                        <button class="btn small danger" type="submit">Delete</button>
+                      </form>
+                    </td>
+                  <% } %>
+                </tr>
+              <% }) %>
+            </tbody>
+            <tfoot>
+              <tr>
+                <th colspan="2">Total spent by <%= f %></th>
+                <th class="num"><%= inr(bucket.total) %></th>
+                <% if (canWrite) { %><th></th><% } %>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      <% } %>
+    </section>
+  <% }) %>
+</div>
+
+<div class="finance-grand">
+  <span>Grand total (all founders, this period):</span>
+  <strong><%= inr(grandTotal) %></strong>
+</div>
+<%- include('partials/footer') %>

@@ -13,6 +13,7 @@ const os = require('node:os');
 const db = require('./lib/db');
 const { init } = require('./lib/schema');
 const { audit, recordLogin, diffInfluencer } = require('./lib/audit');
+const { foundersFor, brandHasFinance } = require('./lib/finance');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -93,6 +94,16 @@ async function canAccessBrand(user, brandId) {
   return !!row;
 }
 
+async function canAccessFinance(user, brandId) {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  const row = await db.one(
+    'SELECT finance_access FROM user_brands WHERE user_id = $1 AND brand_id = $2',
+    [user.id, brandId]
+  );
+  return !!(row && Number(row.finance_access) === 1);
+}
+
 function inr(n) {
   const v = Number(n || 0);
   return '₹' + v.toLocaleString('en-IN', { maximumFractionDigits: 2 });
@@ -103,6 +114,7 @@ app.use(async (req, res, next) => {
     res.locals.user = await currentUser(req);
     res.locals.inr = inr;
     res.locals.flash = req.session.flash || null;
+    res.locals.brandHasFinance = brandHasFinance;
     req.session.flash = null;
     next();
   } catch (e) { next(e); }
@@ -361,6 +373,179 @@ app.post('/influencer/:id/toggle-review', requireAuth, requireAdmin, ah(async (r
   res.redirect(`/influencer/${inf.id}`);
 }));
 
+// ---- Finance (per-brand) ----
+async function loadBrandForFinance(req, res) {
+  const brand = await db.one('SELECT * FROM brands WHERE slug = $1', [req.params.slug]);
+  if (!brand) { res.status(404).render('error', { message: 'Brand not found.' }); return null; }
+  if (!brandHasFinance(brand.slug)) {
+    res.status(404).render('error', { message: 'Finance is not enabled for this brand.' });
+    return null;
+  }
+  if (!await canAccessFinance(res.locals.user, brand.id)) {
+    res.status(403).render('error', { message: 'You do not have finance access for this brand.' });
+    return null;
+  }
+  return brand;
+}
+
+function parseExpenseForm(body) {
+  return {
+    founder: String(body.founder || '').trim(),
+    spent_date: String(body.spent_date || '').trim() || null,
+    vendor: String(body.vendor || '').trim(),
+    amount: Number(body.amount || 0) || 0,
+    notes: String(body.notes || '').trim()
+  };
+}
+
+app.get('/brand/:slug/finance', requireAuth, ah(async (req, res) => {
+  const brand = await loadBrandForFinance(req, res);
+  if (!brand) return;
+  const founders = foundersFor(brand.slug);
+
+  const period = ['month', 'quarter', 'year'].includes(req.query.period) ? req.query.period : 'month';
+  const year = Number(req.query.year) || new Date().getFullYear();
+  const month = Number(req.query.month) || (new Date().getMonth() + 1);
+  const quarter = Number(req.query.quarter) || (Math.floor(new Date().getMonth() / 3) + 1);
+
+  // Build a WHERE clause on spent_date based on period.
+  const params = [brand.id];
+  let where = 'brand_id = $1';
+  let n = 2;
+  if (period === 'year') {
+    where += ` AND ${db.buckets.yearOf('spent_date')} = $${n++}`;
+    params.push(String(year));
+  } else if (period === 'quarter') {
+    where += ` AND ${db.buckets.yearOf('spent_date')} = $${n++}`;
+    params.push(String(year));
+    where += ` AND ${db.buckets.quarter('spent_date')} = $${n++}`;
+    params.push(`${year}-Q${quarter}`);
+  } else {
+    where += ` AND ${db.buckets.month('spent_date')} = $${n++}`;
+    params.push(`${year}-${String(month).padStart(2, '0')}`);
+  }
+
+  // Pull all expenses in range, partition by founder client-side.
+  const rows = await db.many(
+    `SELECT * FROM expenses WHERE ${where} ORDER BY spent_date DESC, id DESC`,
+    params
+  );
+
+  const byFounder = {};
+  for (const f of founders) byFounder[f] = { expenses: [], total: 0 };
+  for (const r of rows) {
+    const amt = Number(r.amount);
+    const bucket = byFounder[r.founder];
+    if (bucket) {
+      bucket.expenses.push({ ...r, amount: amt });
+      bucket.total += amt;
+    }
+  }
+  const grandTotal = Object.values(byFounder).reduce((s, b) => s + b.total, 0);
+
+  res.render('finance', {
+    brand, founders, byFounder, grandTotal,
+    period, year, month, quarter,
+    canWrite: res.locals.user.role === 'admin' || await canAccessFinance(res.locals.user, brand.id)
+  });
+}));
+
+app.get('/brand/:slug/finance/new', requireAuth, ah(async (req, res) => {
+  const brand = await loadBrandForFinance(req, res);
+  if (!brand) return;
+  const founders = foundersFor(brand.slug);
+  const founder = String(req.query.founder || founders[0]);
+  res.render('finance-form', { brand, founders, expense: { founder }, error: null });
+}));
+
+app.post('/brand/:slug/finance/new', requireAuth, ah(async (req, res) => {
+  const brand = await loadBrandForFinance(req, res);
+  if (!brand) return;
+  const founders = foundersFor(brand.slug);
+  const data = parseExpenseForm(req.body);
+  if (!founders.includes(data.founder) || !data.spent_date || !data.vendor) {
+    return res.render('finance-form', { brand, founders, expense: data, error: 'Founder, date, and vendor are required.' });
+  }
+  const me = res.locals.user;
+  const result = await db.query(`
+    INSERT INTO expenses (brand_id, founder, spent_date, vendor, amount, notes,
+      created_by_id, created_by_username, updated_by_id, updated_by_username)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $7, $8)
+    RETURNING id
+  `, [brand.id, data.founder, data.spent_date, data.vendor, data.amount, data.notes, me.id, me.username]);
+  const newId = result.rows[0] ? result.rows[0].id : result.lastInsertRowid;
+  await audit(me, 'create', 'expense', newId, {
+    brandId: brand.id,
+    summary: `Added ₹${data.amount} expense for ${data.founder} (vendor: ${data.vendor})`,
+    changes: data
+  });
+  flash(req, 'success', 'Expense added.');
+  res.redirect(`/brand/${brand.slug}/finance`);
+}));
+
+app.get('/finance/:id/edit', requireAuth, ah(async (req, res) => {
+  const exp = await db.one('SELECT * FROM expenses WHERE id = $1', [req.params.id]);
+  if (!exp) return res.status(404).render('error', { message: 'Expense not found.' });
+  const brand = await db.one('SELECT * FROM brands WHERE id = $1', [exp.brand_id]);
+  if (!brand || !brandHasFinance(brand.slug)) return res.status(404).render('error', { message: 'Not found.' });
+  if (!await canAccessFinance(res.locals.user, brand.id)) {
+    return res.status(403).render('error', { message: 'No access.' });
+  }
+  res.render('finance-form', { brand, founders: foundersFor(brand.slug), expense: exp, error: null });
+}));
+
+app.post('/finance/:id/edit', requireAuth, ah(async (req, res) => {
+  const exp = await db.one('SELECT * FROM expenses WHERE id = $1', [req.params.id]);
+  if (!exp) return res.status(404).render('error', { message: 'Expense not found.' });
+  const brand = await db.one('SELECT * FROM brands WHERE id = $1', [exp.brand_id]);
+  if (!brand || !brandHasFinance(brand.slug)) return res.status(404).render('error', { message: 'Not found.' });
+  if (!await canAccessFinance(res.locals.user, brand.id)) {
+    return res.status(403).render('error', { message: 'No access.' });
+  }
+  const founders = foundersFor(brand.slug);
+  const data = parseExpenseForm(req.body);
+  if (!founders.includes(data.founder) || !data.spent_date || !data.vendor) {
+    return res.render('finance-form', { brand, founders, expense: { ...exp, ...data }, error: 'Founder, date, and vendor are required.' });
+  }
+  const me = res.locals.user;
+  const nowFn = NOW_FN();
+  await db.query(`
+    UPDATE expenses SET founder=$1, spent_date=$2, vendor=$3, amount=$4, notes=$5,
+      updated_by_id=$6, updated_by_username=$7, updated_at=${nowFn}
+    WHERE id = $8
+  `, [data.founder, data.spent_date, data.vendor, data.amount, data.notes, me.id, me.username, exp.id]);
+  const changes = {};
+  for (const k of ['founder', 'spent_date', 'vendor', 'amount', 'notes']) {
+    if (String(exp[k] ?? '') !== String(data[k] ?? '')) changes[k] = { from: exp[k], to: data[k] };
+  }
+  if (Object.keys(changes).length) {
+    await audit(me, 'update', 'expense', exp.id, {
+      brandId: exp.brand_id,
+      summary: `Updated expense for ${data.founder} (vendor: ${data.vendor})`,
+      changes
+    });
+  }
+  flash(req, 'success', 'Expense saved.');
+  res.redirect(`/brand/${brand.slug}/finance`);
+}));
+
+app.post('/finance/:id/delete', requireAuth, ah(async (req, res) => {
+  const exp = await db.one('SELECT * FROM expenses WHERE id = $1', [req.params.id]);
+  if (!exp) return res.status(404).render('error', { message: 'Expense not found.' });
+  const brand = await db.one('SELECT slug FROM brands WHERE id = $1', [exp.brand_id]);
+  if (!brand || !brandHasFinance(brand.slug)) return res.status(404).render('error', { message: 'Not found.' });
+  if (!await canAccessFinance(res.locals.user, exp.brand_id)) {
+    return res.status(403).render('error', { message: 'No access.' });
+  }
+  await db.query('DELETE FROM expenses WHERE id = $1', [exp.id]);
+  await audit(res.locals.user, 'delete', 'expense', exp.id, {
+    brandId: exp.brand_id,
+    summary: `Deleted ₹${exp.amount} expense for ${exp.founder} (vendor: ${exp.vendor})`
+  });
+  flash(req, 'success', 'Expense deleted.');
+  res.redirect(`/brand/${brand.slug}/finance`);
+}));
+
 // ---- Reports ----
 app.get('/reports', requireAuth, ah(async (req, res) => {
   const user = res.locals.user;
@@ -374,7 +559,10 @@ app.get('/reports', requireAuth, ah(async (req, res) => {
   const brandFilter = req.query.brand && brandIds.includes(Number(req.query.brand)) ? Number(req.query.brand) : 'all';
   const year = Number(req.query.year) || new Date().getFullYear();
 
-  const bucketExpr = db.buckets[period];
+  const INF_DATE = db.dialect === 'pg'
+    ? "COALESCE(timeline_date::date, created_at::date)"
+    : "COALESCE(timeline_date, created_at)";
+  const bucketExpr = db.buckets[period](INF_DATE);
 
   const params = [];
   let n = 1;
@@ -386,7 +574,7 @@ app.get('/reports', requireAuth, ah(async (req, res) => {
     params.push(brandFilter);
   }
   if (period !== 'year') {
-    where += ` AND ${db.buckets.yearOf} = $${n++}`;
+    where += ` AND ${db.buckets.yearOf(INF_DATE)} = $${n++}`;
     params.push(String(year));
   }
 
@@ -430,13 +618,17 @@ app.get('/reports', requireAuth, ah(async (req, res) => {
 // ---- Admin user management ----
 app.get('/admin/users', requireAuth, requireAdmin, ah(async (req, res) => {
   const users = await db.many('SELECT id, username, role, created_at FROM users ORDER BY role, username');
-  const brands = await db.many('SELECT id, name FROM brands ORDER BY name');
-  const assignments = await db.many('SELECT user_id, brand_id FROM user_brands');
-  const byUser = {};
+  const brands = await db.many('SELECT id, name, slug FROM brands ORDER BY name');
+  const assignments = await db.many('SELECT user_id, brand_id, finance_access FROM user_brands');
+  const brandByUser = {};
+  const financeByUser = {};
   for (const a of assignments) {
-    (byUser[a.user_id] ||= new Set()).add(Number(a.brand_id));
+    (brandByUser[a.user_id] ||= new Set()).add(Number(a.brand_id));
+    if (Number(a.finance_access) === 1) {
+      (financeByUser[a.user_id] ||= new Set()).add(Number(a.brand_id));
+    }
   }
-  res.render('admin-users', { users, brands, byUser, error: null });
+  res.render('admin-users', { users, brands, brandByUser, financeByUser, error: null });
 }));
 
 app.post('/admin/users/new', requireAuth, requireAdmin, ah(async (req, res) => {
@@ -459,15 +651,20 @@ app.post('/admin/users/new', requireAuth, requireAdmin, ah(async (req, res) => {
   );
   const newId = result.rows[0] ? result.rows[0].id : result.lastInsertRowid;
   const brandIds = [].concat(req.body.brand_ids || []).map(Number).filter(Boolean);
+  const financeIds = new Set([].concat(req.body.finance_ids || []).map(Number).filter(Boolean));
   for (const bid of brandIds) {
+    const fin = financeIds.has(bid) ? 1 : 0;
     if (db.dialect === 'pg') {
-      await db.query('INSERT INTO user_brands (user_id, brand_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [newId, bid]);
+      await db.query(
+        'INSERT INTO user_brands (user_id, brand_id, finance_access) VALUES ($1, $2, $3) ON CONFLICT (user_id, brand_id) DO UPDATE SET finance_access = EXCLUDED.finance_access',
+        [newId, bid, fin]
+      );
     } else {
-      await db.query('INSERT OR IGNORE INTO user_brands (user_id, brand_id) VALUES ($1, $2)', [newId, bid]);
+      await db.query('INSERT OR REPLACE INTO user_brands (user_id, brand_id, finance_access) VALUES ($1, $2, $3)', [newId, bid, fin]);
     }
   }
   await audit(res.locals.user, 'create', 'user', newId, {
-    summary: `Created user "${username}" (${role}) with access to ${brandIds.length} brand(s)`
+    summary: `Created user "${username}" (${role}); ${brandIds.length} brand(s), ${financeIds.size} with finance`
   });
   flash(req, 'success', `User "${username}" created.`);
   res.redirect('/admin/users');
@@ -482,19 +679,24 @@ app.post('/admin/users/:id/brands', requireAuth, requireAdmin, ah(async (req, re
     return res.redirect('/admin/users');
   }
   const brandIds = [].concat(req.body.brand_ids || []).map(Number).filter(Boolean);
+  const financeIds = new Set([].concat(req.body.finance_ids || []).map(Number).filter(Boolean));
   await db.query('DELETE FROM user_brands WHERE user_id = $1', [uid]);
   for (const bid of brandIds) {
+    const fin = financeIds.has(bid) ? 1 : 0;
     if (db.dialect === 'pg') {
-      await db.query('INSERT INTO user_brands (user_id, brand_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [uid, bid]);
+      await db.query(
+        'INSERT INTO user_brands (user_id, brand_id, finance_access) VALUES ($1, $2, $3) ON CONFLICT (user_id, brand_id) DO UPDATE SET finance_access = EXCLUDED.finance_access',
+        [uid, bid, fin]
+      );
     } else {
-      await db.query('INSERT OR IGNORE INTO user_brands (user_id, brand_id) VALUES ($1, $2)', [uid, bid]);
+      await db.query('INSERT OR REPLACE INTO user_brands (user_id, brand_id, finance_access) VALUES ($1, $2, $3)', [uid, bid, fin]);
     }
   }
   await audit(res.locals.user, 'update', 'user', uid, {
-    summary: `Updated brand access for "${target.username}" (now ${brandIds.length} brand(s))`,
-    changes: { brand_ids: brandIds }
+    summary: `Updated access for "${target.username}" (${brandIds.length} brand(s), ${financeIds.size} with finance)`,
+    changes: { brand_ids: brandIds, finance_ids: [...financeIds] }
   });
-  flash(req, 'success', 'Brand access updated.');
+  flash(req, 'success', 'Access updated.');
   res.redirect('/admin/users');
 }));
 

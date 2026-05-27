@@ -305,6 +305,65 @@ table.data .num { text-align: right; font-variant-numeric: tabular-nums; }
 .pill.subtle { background: #f3f4f8; color: var(--muted); text-transform: none; letter-spacing: 0; font-weight: 500; margin: 0 2px 2px 0; }
 
 .small { font-size: 12px; }
+
+/* Finance two-column layout */
+.finance-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.finance-col {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+}
+.finance-col > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.finance-col h2 { margin: 0; font-size: 17px; }
+.finance-table tfoot th { background: #f7f8fc; }
+.row-actions { white-space: nowrap; display: flex; gap: 6px; }
+.row-actions form { margin: 0; }
+.finance-grand {
+  background: var(--ink);
+  color: #fff;
+  padding: 14px 20px;
+  border-radius: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 16px;
+}
+.finance-grand strong { font-size: 20px; }
+
+/* Per-user access grid in admin/users */
+table.access-grid {
+  border-collapse: collapse;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+table.access-grid th, table.access-grid td {
+  padding: 4px 12px 4px 0;
+  text-align: left;
+}
+table.access-grid thead th {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--muted);
+  letter-spacing: .04em;
+}
+table.access-grid input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; }
+
+@media (max-width: 720px) {
+  .finance-grid { grid-template-columns: 1fr; }
+}
 .pager { display: flex; gap: 14px; align-items: center; justify-content: center; margin: 18px 0; }
 details summary { cursor: pointer; color: var(--accent); }
 details[open] summary { margin-bottom: 6px; }

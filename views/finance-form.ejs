@@ -1,0 +1,41 @@
+<%- include('partials/header', { title: expense && expense.id ? 'Edit expense' : 'New expense' }) %>
+<p class="breadcrumb">
+  <a href="/">Brands</a> /
+  <a href="/brand/<%= brand.slug %>"><%= brand.name %></a> /
+  <a href="/brand/<%= brand.slug %>/finance">Finance</a> /
+  <span><%= expense && expense.id ? 'Edit' : 'New' %></span>
+</p>
+<h1><%= expense && expense.id ? 'Edit expense' : 'New expense' %></h1>
+<% if (error) { %><div class="flash error"><%= error %></div><% } %>
+
+<form method="post" action="<%= expense && expense.id ? '/finance/' + expense.id + '/edit' : '/brand/' + brand.slug + '/finance/new' %>" class="form">
+  <div class="row">
+    <label>Founder *
+      <select name="founder" required>
+        <% founders.forEach(f => { %>
+          <option value="<%= f %>" <%= expense && expense.founder === f ? 'selected' : '' %>><%= f %></option>
+        <% }) %>
+      </select>
+    </label>
+    <label>Date *
+      <input type="date" name="spent_date" required value="<%= expense ? expense.spent_date || '' : '' %>">
+    </label>
+  </div>
+  <div class="row">
+    <label>Vendor *
+      <input type="text" name="vendor" required value="<%= expense ? expense.vendor || '' : '' %>" placeholder="Who did you pay?">
+    </label>
+    <label>Amount (₹) *
+      <input type="number" name="amount" min="0" step="0.01" required value="<%= expense ? expense.amount || 0 : 0 %>">
+    </label>
+  </div>
+  <label>Notes
+    <textarea name="notes" rows="3" placeholder="Optional notes about this expense"><%= expense ? expense.notes || '' : '' %></textarea>
+  </label>
+
+  <div class="actions">
+    <button type="submit" class="btn primary">Save</button>
+    <a href="/brand/<%= brand.slug %>/finance" class="btn link-btn">Cancel</a>
+  </div>
+</form>
+<%- include('partials/footer') %>

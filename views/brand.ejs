@@ -4,9 +4,14 @@
     <p class="breadcrumb"><a href="/">Brands</a> / <span><%= brand.name %></span></p>
     <h1><%= brand.name %></h1>
   </div>
-  <% if (user.role === 'admin') { %>
-    <a class="btn primary" href="/brand/<%= brand.slug %>/new">+ Add Influencer</a>
-  <% } %>
+  <div class="action-row">
+    <% if (brandHasFinance(brand.slug)) { %>
+      <a class="btn" href="/brand/<%= brand.slug %>/finance">💰 Finance</a>
+    <% } %>
+    <% if (user.role === 'admin') { %>
+      <a class="btn primary" href="/brand/<%= brand.slug %>/new">+ Add Influencer</a>
+    <% } %>
+  </div>
 </div>
 
 <form class="search" method="get" action="/brand/<%= brand.slug %>">

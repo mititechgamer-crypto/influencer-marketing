@@ -20,11 +20,27 @@
     </div>
     <fieldset class="checks">
       <legend>Brand access (for User role)</legend>
-      <% brands.forEach(b => { %>
-        <label class="check">
-          <input type="checkbox" name="brand_ids" value="<%= b.id %>"> <%= b.name %>
-        </label>
-      <% }) %>
+      <table class="access-grid">
+        <thead>
+          <tr><th>Brand</th><th>View</th><th>Finance</th></tr>
+        </thead>
+        <tbody>
+          <% brands.forEach(b => { %>
+            <tr>
+              <td><%= b.name %></td>
+              <td><input type="checkbox" name="brand_ids" value="<%= b.id %>"></td>
+              <td>
+                <% if (brandHasFinance(b.slug)) { %>
+                  <input type="checkbox" name="finance_ids" value="<%= b.id %>">
+                <% } else { %>
+                  <span class="muted small">—</span>
+                <% } %>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+      <p class="muted small">Tick <strong>View</strong> to give access to the brand. <strong>Finance</strong> requires View; it unlocks the Finance section (currently only Vaayuraksh).</p>
     </fieldset>
     <button class="btn primary" type="submit">Create user</button>
   </form>
@@ -34,25 +50,38 @@
   <h2>Existing users</h2>
   <div class="table-wrap">
     <table class="data">
-      <thead><tr><th>Username</th><th>Role</th><th>Brand access</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Username</th><th>Role</th><th>Brand &amp; finance access</th><th>Actions</th></tr></thead>
       <tbody>
         <% users.forEach(u => {
-             const assigned = byUser[u.id] || new Set(); %>
+             const brandSet = brandByUser[u.id] || new Set();
+             const finSet = financeByUser[u.id] || new Set(); %>
           <tr>
             <td><strong><%= u.username %></strong></td>
             <td><span class="role <%= u.role %>"><%= u.role %></span></td>
             <td>
               <% if (u.role === 'admin') { %>
-                <span class="muted">All brands (admin)</span>
+                <span class="muted">All brands + all finance (admin)</span>
               <% } else { %>
-                <form method="post" action="/admin/users/<%= u.id %>/brands" class="inline-stack">
-                  <% brands.forEach(b => { %>
-                    <label class="check">
-                      <input type="checkbox" name="brand_ids" value="<%= b.id %>" <%= assigned.has(b.id) ? 'checked' : '' %>>
-                      <%= b.name %>
-                    </label>
-                  <% }) %>
-                  <button class="btn small" type="submit">Save</button>
+                <form method="post" action="/admin/users/<%= u.id %>/brands">
+                  <table class="access-grid">
+                    <thead><tr><th>Brand</th><th>View</th><th>Finance</th></tr></thead>
+                    <tbody>
+                      <% brands.forEach(b => { %>
+                        <tr>
+                          <td><%= b.name %></td>
+                          <td><input type="checkbox" name="brand_ids" value="<%= b.id %>" <%= brandSet.has(b.id) ? 'checked' : '' %>></td>
+                          <td>
+                            <% if (brandHasFinance(b.slug)) { %>
+                              <input type="checkbox" name="finance_ids" value="<%= b.id %>" <%= finSet.has(b.id) ? 'checked' : '' %>>
+                            <% } else { %>
+                              <span class="muted small">—</span>
+                            <% } %>
+                          </td>
+                        </tr>
+                      <% }) %>
+                    </tbody>
+                  </table>
+                  <button class="btn small" type="submit">Save access</button>
                 </form>
               <% } %>
             </td>
