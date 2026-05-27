@@ -808,8 +808,16 @@ app.get('/healthz', (req, res) => res.json({ ok: true }));
 // ---- 404 + error handler ----
 app.use((req, res) => res.status(404).render('error', { message: 'Page not found.' }));
 app.use((err, req, res, next) => {
-  console.error(err);
-  res.status(500).render('error', { message: 'Server error. Please try again.' });
+  console.error('--- REQUEST ERROR ---');
+  console.error(err && err.stack ? err.stack : err);
+  console.error('--- /REQUEST ERROR ---');
+  // Surface a short error message in production until we're stable.
+  // Remove `|| true` after debugging to hide details from end users.
+  const showDetail = process.env.SHOW_ERROR_DETAIL === '1' || true;
+  const msg = showDetail
+    ? `Server error: ${err && err.message ? err.message : String(err)}`
+    : 'Server error. Please try again.';
+  res.status(500).render('error', { message: msg });
 });
 
 // ---- Initialization (memoized so serverless cold starts share it) ----
