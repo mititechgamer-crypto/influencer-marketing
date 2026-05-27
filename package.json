@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "private": true,
   "description": "Influencer marketing data manager for SimpleObjectz, Vaayuraksh, Mintly Beverages",
-  "main": "server.js",
   "scripts": {
     "start": "node --no-warnings=ExperimentalWarning server.js",
     "init-db": "node --no-warnings=ExperimentalWarning lib/schema.js"

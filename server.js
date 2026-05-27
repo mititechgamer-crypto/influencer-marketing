@@ -52,27 +52,9 @@ app.set('views', path.join(__dirname, 'views'));
 app.use(express.urlencoded({ extended: false }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Vercel rewrites all requests to /api/index (or /server.js). Restore the
-// original request path so Express's routes see "/login", "/", etc. and not
-// the rewritten internal target.
+// Diagnostic logging — visible in Vercel runtime logs.
 app.use((req, res, next) => {
-  const original = req.headers['x-vercel-original-url'] || req.headers['x-original-url'];
-  if (original && typeof original === 'string') {
-    // x-vercel-original-url may be a full URL or just the path
-    try {
-      const u = original.startsWith('http') ? new URL(original) : new URL(original, 'http://x');
-      req.url = u.pathname + u.search;
-    } catch {
-      req.url = original;
-    }
-  } else {
-    // Fallback: strip known rewrite prefixes if no header is present.
-    for (const prefix of ['/api/index', '/server.js']) {
-      if (req.url === prefix) { req.url = '/'; break; }
-      if (req.url.startsWith(prefix + '?')) { req.url = '/' + req.url.slice(prefix.length + 1); break; }
-      if (req.url.startsWith(prefix + '/')) { req.url = req.url.slice(prefix.length); break; }
-    }
-  }
+  console.log(`[REQ] ${req.method} url=${req.url} originalUrl=${req.originalUrl}`);
   next();
 });
 

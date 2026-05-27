@@ -1,13 +1,15 @@
 {
-  "functions": {
-    "server.js": {
-      "includeFiles": "views/**"
-    },
-    "api/index.js": {
-      "includeFiles": "views/**"
+  "version": 2,
+  "builds": [
+    {
+      "src": "server.js",
+      "use": "@vercel/node",
+      "config": { "includeFiles": ["views/**", "lib/**", "public/**"] }
     }
-  },
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/server.js" }
+  ],
+  "routes": [
+    { "src": "/style\\.css", "dest": "/public/style.css" },
+    { "src": "/favicon\\.ico", "status": 204 },
+    { "src": "/(.*)", "dest": "/server.js" }
   ]
 }
