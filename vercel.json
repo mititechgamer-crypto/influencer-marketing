@@ -4,12 +4,14 @@
     {
       "src": "server.js",
       "use": "@vercel/node",
-      "config": { "includeFiles": ["views/**", "lib/**", "public/**"] }
-    }
+      "config": { "includeFiles": "{views,lib,public}/**" }
+    },
+    { "src": "public/**", "use": "@vercel/static" }
   ],
   "routes": [
     { "src": "/style\\.css", "dest": "/public/style.css" },
-    { "src": "/favicon\\.ico", "status": 204 },
+    { "handle": "filesystem" },
+    { "src": "/favicon\\.(ico|png)", "status": 204 },
     { "src": "/(.*)", "dest": "/server.js" }
   ]
 }
