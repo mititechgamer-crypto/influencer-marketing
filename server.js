@@ -54,8 +54,31 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Diagnostic logging — visible in Vercel runtime logs.
 app.use((req, res, next) => {
-  console.log(`[REQ] ${req.method} url=${req.url} originalUrl=${req.originalUrl}`);
+  console.log(`[REQ] ${req.method} url=${req.url} originalUrl=${req.originalUrl} cookie=${req.headers.cookie ? 'yes' : 'no'}`);
+  const start = Date.now();
+  res.on('finish', () => {
+    console.log(`[RES] ${req.method} ${req.url} -> ${res.statusCode} (${Date.now() - start}ms)`);
+  });
   next();
+});
+
+// HTML-based redirect helper. Vercel was upgrading 302/303 responses to 307
+// (method-preserving) which broke the POST-redirect-GET pattern. This sends
+// a 200 response with a tiny HTML page that triggers a browser GET.
+function htmlRedirect(res, location) {
+  const safe = String(location).replace(/[<>"'&]/g, c => ({
+    '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '&': '&amp;'
+  }[c]));
+  const jsLoc = JSON.stringify(String(location));
+  res.status(200).type('html').send(
+    `<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=${safe}"><title>Redirecting…</title><script>window.location.replace(${jsLoc});</script><p>Redirecting to <a href="${safe}">${safe}</a>…</p>`
+  );
+}
+
+// Belt-and-suspenders: a safety net for stray POST / (browser auto-retries, etc.)
+app.post('/', (req, res) => {
+  console.log('[POST_ROOT] safety redirect to /');
+  htmlRedirect(res, '/');
 });
 
 // behind Vercel / Render / any HTTPS proxy
@@ -162,11 +185,11 @@ app.post('/login', ah(async (req, res) => {
   }
   req.session.userId = user.id;
   await recordLogin(req, user, true);
-  res.redirect('/');
+  htmlRedirect(res,'/');
 }));
 
 app.post('/logout', (req, res) => {
-  req.session.destroy(() => res.redirect('/login'));
+  req.session.destroy(() => htmlRedirect(res,'/login'));
 });
 
 // ---- Dashboard ----
@@ -300,7 +323,7 @@ app.post('/brand/:slug/new', requireAuth, requireAdmin, ah(async (req, res) => {
     changes: data
   });
   flash(req, 'success', 'Influencer added.');
-  res.redirect(`/influencer/${newId}`);
+  htmlRedirect(res,`/influencer/${newId}`);
 }));
 
 app.get('/influencer/:id', requireAuth, ah(async (req, res) => {
@@ -346,7 +369,7 @@ app.post('/influencer/:id/edit', requireAuth, requireAdmin, ah(async (req, res) 
     });
   }
   flash(req, 'success', 'Saved.');
-  res.redirect(`/influencer/${inf.id}`);
+  htmlRedirect(res,`/influencer/${inf.id}`);
 }));
 
 app.post('/influencer/:id/delete', requireAuth, requireAdmin, ah(async (req, res) => {
@@ -359,7 +382,7 @@ app.post('/influencer/:id/delete', requireAuth, requireAdmin, ah(async (req, res
     summary: `Deleted ${inf.handle} (${inf.name})`
   });
   flash(req, 'success', 'Influencer deleted.');
-  res.redirect(`/brand/${brand.slug}`);
+  htmlRedirect(res,`/brand/${brand.slug}`);
 }));
 
 app.post('/influencer/:id/toggle-review', requireAuth, requireAdmin, ah(async (req, res) => {
@@ -376,7 +399,7 @@ app.post('/influencer/:id/toggle-review', requireAuth, requireAdmin, ah(async (r
     summary: `Marked review ${newVal ? 'submitted' : 'not submitted'} for ${inf.handle}`,
     changes: { review_submitted: { from: inf.review_submitted, to: newVal } }
   });
-  res.redirect(`/influencer/${inf.id}`);
+  htmlRedirect(res,`/influencer/${inf.id}`);
 }));
 
 // ---- Finance (per-brand) ----
@@ -486,7 +509,7 @@ app.post('/brand/:slug/finance/new', requireAuth, ah(async (req, res) => {
     changes: data
   });
   flash(req, 'success', 'Expense added.');
-  res.redirect(`/brand/${brand.slug}/finance`);
+  htmlRedirect(res,`/brand/${brand.slug}/finance`);
 }));
 
 app.get('/finance/:id/edit', requireAuth, ah(async (req, res) => {
@@ -532,7 +555,7 @@ app.post('/finance/:id/edit', requireAuth, ah(async (req, res) => {
     });
   }
   flash(req, 'success', 'Expense saved.');
-  res.redirect(`/brand/${brand.slug}/finance`);
+  htmlRedirect(res,`/brand/${brand.slug}/finance`);
 }));
 
 app.post('/finance/:id/delete', requireAuth, ah(async (req, res) => {
@@ -549,7 +572,7 @@ app.post('/finance/:id/delete', requireAuth, ah(async (req, res) => {
     summary: `Deleted ₹${exp.amount} expense for ${exp.founder} (vendor: ${exp.vendor})`
   });
   flash(req, 'success', 'Expense deleted.');
-  res.redirect(`/brand/${brand.slug}/finance`);
+  htmlRedirect(res,`/brand/${brand.slug}/finance`);
 }));
 
 // ---- Reports ----
@@ -643,12 +666,12 @@ app.post('/admin/users/new', requireAuth, requireAdmin, ah(async (req, res) => {
   const role = req.body.role === 'admin' ? 'admin' : 'user';
   if (!username || password.length < 6) {
     flash(req, 'error', 'Username required, password must be at least 6 chars.');
-    return res.redirect('/admin/users');
+    return htmlRedirect(res,'/admin/users');
   }
   const exists = await db.one('SELECT 1 AS ok FROM users WHERE username = $1', [username]);
   if (exists) {
     flash(req, 'error', 'Username already taken.');
-    return res.redirect('/admin/users');
+    return htmlRedirect(res,'/admin/users');
   }
   const hash = bcrypt.hashSync(password, 10);
   const result = await db.query(
@@ -673,7 +696,7 @@ app.post('/admin/users/new', requireAuth, requireAdmin, ah(async (req, res) => {
     summary: `Created user "${username}" (${role}); ${brandIds.length} brand(s), ${financeIds.size} with finance`
   });
   flash(req, 'success', `User "${username}" created.`);
-  res.redirect('/admin/users');
+  htmlRedirect(res,'/admin/users');
 }));
 
 app.post('/admin/users/:id/brands', requireAuth, requireAdmin, ah(async (req, res) => {
@@ -682,7 +705,7 @@ app.post('/admin/users/:id/brands', requireAuth, requireAdmin, ah(async (req, re
   if (!target) return res.status(404).render('error', { message: 'User not found.' });
   if (target.role === 'admin') {
     flash(req, 'error', 'Admins already see all brands.');
-    return res.redirect('/admin/users');
+    return htmlRedirect(res,'/admin/users');
   }
   const brandIds = [].concat(req.body.brand_ids || []).map(Number).filter(Boolean);
   const financeIds = new Set([].concat(req.body.finance_ids || []).map(Number).filter(Boolean));
@@ -703,7 +726,7 @@ app.post('/admin/users/:id/brands', requireAuth, requireAdmin, ah(async (req, re
     changes: { brand_ids: brandIds, finance_ids: [...financeIds] }
   });
   flash(req, 'success', 'Access updated.');
-  res.redirect('/admin/users');
+  htmlRedirect(res,'/admin/users');
 }));
 
 app.post('/admin/users/:id/reset-password', requireAuth, requireAdmin, ah(async (req, res) => {
@@ -713,7 +736,7 @@ app.post('/admin/users/:id/reset-password', requireAuth, requireAdmin, ah(async 
   const password = String(req.body.password || '');
   if (password.length < 6) {
     flash(req, 'error', 'Password must be at least 6 chars.');
-    return res.redirect('/admin/users');
+    return htmlRedirect(res,'/admin/users');
   }
   const hash = bcrypt.hashSync(password, 10);
   await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, uid]);
@@ -721,14 +744,14 @@ app.post('/admin/users/:id/reset-password', requireAuth, requireAdmin, ah(async 
     summary: `Reset password for "${target.username}"`
   });
   flash(req, 'success', 'Password reset.');
-  res.redirect('/admin/users');
+  htmlRedirect(res,'/admin/users');
 }));
 
 app.post('/admin/users/:id/delete', requireAuth, requireAdmin, ah(async (req, res) => {
   const uid = Number(req.params.id);
   if (uid === res.locals.user.id) {
     flash(req, 'error', "You can't delete yourself.");
-    return res.redirect('/admin/users');
+    return htmlRedirect(res,'/admin/users');
   }
   const target = await db.one('SELECT username FROM users WHERE id = $1', [uid]);
   await db.query('DELETE FROM users WHERE id = $1', [uid]);
@@ -736,7 +759,7 @@ app.post('/admin/users/:id/delete', requireAuth, requireAdmin, ah(async (req, re
     await audit(res.locals.user, 'delete', 'user', uid, { summary: `Deleted user "${target.username}"` });
   }
   flash(req, 'success', 'User deleted.');
-  res.redirect('/admin/users');
+  htmlRedirect(res,'/admin/users');
 }));
 
 // ---- Admin: activity log ----
@@ -827,6 +850,18 @@ app.use((err, req, res, next) => {
     : 'Server error. Please try again.';
   res.status(500).render('error', { message: msg });
 });
+
+// ---- Boot-time diagnostics ----
+try {
+  const viewsDir = path.join(__dirname, 'views');
+  console.log(`[BOOT] __dirname=${__dirname} viewsDir=${viewsDir} exists=${fs.existsSync(viewsDir)}`);
+  if (fs.existsSync(viewsDir)) {
+    console.log(`[BOOT] views/: ${fs.readdirSync(viewsDir).join(', ')}`);
+  }
+  console.log(`[BOOT] dialect=${db.dialect} isProd=${isProd} isServerless=${isServerless} VERCEL=${process.env.VERCEL}`);
+} catch (e) {
+  console.error('[BOOT] diagnostics error:', e);
+}
 
 // ---- Initialization (memoized so serverless cold starts share it) ----
 let _initPromise;
